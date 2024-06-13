@@ -71,6 +71,7 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 static bool sort_priority_desc(const struct list_elem *t_a, const struct list_elem *t_b, void *);
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -319,13 +320,6 @@ thread_yield (void)
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
-}
-
-static bool
-sort_priority_desc(const struct list_elem *t_a, const struct list_elem *t_b, void *aux UNUSED) {
-  struct thread *t1 = list_entry(t_a, struct thread, elem);
-  struct thread *t2 = list_entry(t_b, struct thread, elem);
-  return t1->priority > t2->priority;
 }
 
 /* Invoke function 'func' on all threads, passing along 'aux'.
@@ -596,6 +590,14 @@ allocate_tid (void)
 
   return tid;
 }
+
+static bool
+sort_priority_desc(const struct list_elem *t_a, const struct list_elem *t_b, void *aux UNUSED) {
+  struct thread *t1 = list_entry(t_a, struct thread, elem);
+  struct thread *t2 = list_entry(t_b, struct thread, elem);
+  return t1->priority > t2->priority;
+}
+
 
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
