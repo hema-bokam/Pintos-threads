@@ -70,7 +70,7 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
-
+static bool sort_priority_desc(const struct list_elem *t_a, const struct list_elem *t_b, void *);
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -237,8 +237,13 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  list_insert_ordered(&ready_list, &t->elem, sort_priority_desc, NULL);
   t->status = THREAD_READY;
+  if (thread_current() != idle_thread) 
+  {
+    if(t->priority > thread_get_priority())
+      thread_yield();
+  }
   intr_set_level (old_level);
 }
 
@@ -307,11 +312,20 @@ thread_yield (void)
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
-  if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+  if (cur != idle_thread)
+  { 
+    list_insert_ordered(&ready_list, &cur->elem, sort_priority_desc, NULL);
+  }
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
+}
+
+static bool
+sort_priority_desc(const struct list_elem *t_a, const struct list_elem *t_b, void *aux UNUSED) {
+  struct thread *t1 = list_entry(t_a, struct thread, elem);
+  struct thread *t2 = list_entry(t_b, struct thread, elem);
+  return t1->priority > t2->priority;
 }
 
 /* Invoke function 'func' on all threads, passing along 'aux'.
@@ -335,7 +349,11 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
+  int cur_p = thread_get_priority();
+  
   thread_current ()->priority = new_priority;
+  if (new_priority < cur_p)
+    thread_yield();
 }
 
 /* Returns the current thread's priority. */
