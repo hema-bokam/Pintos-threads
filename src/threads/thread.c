@@ -11,6 +11,9 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+
+#include "tests/threads/tests.h"
+
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -70,7 +73,7 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
-static bool sort_priority_desc(const struct list_elem *t_a, const struct list_elem *t_b, void *);
+
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -167,6 +170,9 @@ tid_t
 thread_create (const char *name, int priority,
                thread_func *function, void *aux) 
 {
+ // msg("$$$ Inside thread create");
+ // msg("$$$ Current running thread is : %s, %d", thread_current()->name, thread_current()->priority);
+  //msg("$$$ Thread create called with: %s, %d", name, priority);
   struct thread *t;
   struct kernel_thread_frame *kf;
   struct switch_entry_frame *ef;
@@ -201,7 +207,7 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
-
+  thread_yield();
   return tid;
 }
 
@@ -240,11 +246,6 @@ thread_unblock (struct thread *t)
   ASSERT (t->status == THREAD_BLOCKED);
   list_insert_ordered(&ready_list, &t->elem, sort_priority_desc, NULL);
   t->status = THREAD_READY;
-  if (thread_current() != idle_thread) 
-  {
-    if(t->priority > thread_get_priority())
-      thread_yield();
-  }
   intr_set_level (old_level);
 }
 
@@ -343,11 +344,17 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  int cur_p = thread_get_priority();
-  
-  thread_current ()->priority = new_priority;
-  if (new_priority < cur_p)
-    thread_yield();
+  enum intr_level old_level = intr_disable();
+  if(!thread_mlfqs){
+    struct thread *cur_thread = thread_current();
+    cur_thread -> original_priority = new_priority;
+    if(new_priority > cur_thread -> priority || list_empty(&cur_thread -> my_locks))
+    {
+      cur_thread -> priority = new_priority;
+      thread_yield();
+    }
+  }
+  intr_set_level(old_level);
 }
 
 /* Returns the current thread's priority. */
@@ -475,9 +482,12 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
-
+  t->original_priority = priority;
+  t->waiting_lock = NULL;
+  list_init(&t->my_locks);
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
+  // list_sort(&all_list, (list_less_func *)&sort_priority_desc, NULL);
   intr_set_level (old_level);
 }
 
@@ -591,11 +601,51 @@ allocate_tid (void)
   return tid;
 }
 
-static bool
+bool
 sort_priority_desc(const struct list_elem *t_a, const struct list_elem *t_b, void *aux UNUSED) {
   struct thread *t1 = list_entry(t_a, struct thread, elem);
   struct thread *t2 = list_entry(t_b, struct thread, elem);
   return t1->priority > t2->priority;
+}
+
+void 
+update_thread_priority_value(struct thread *t) {
+  enum intr_level old_level = intr_disable();
+  if (list_empty(&t -> my_locks)) {
+    t -> priority = t->original_priority;
+  }else{
+    list_sort(&t->my_locks, sort_lock_priority_desc, NULL); 
+    struct lock *highest_priority_lock = list_entry(list_front(&t->my_locks), struct lock, elem);
+    if(t->original_priority > highest_priority_lock->maximum_priority)
+      t -> priority = t->original_priority;
+    else
+      t -> priority = highest_priority_lock->maximum_priority;
+  } 
+  if(t->status == THREAD_READY) {
+    list_remove(&t->elem);
+    list_insert_ordered(&ready_list, &t->elem, sort_priority_desc, NULL); 
+  }
+  intr_set_level(old_level);
+}
+
+bool
+sort_lock_priority_desc(const struct list_elem *l_a, const struct list_elem *l_b, void *aux UNUSED) {
+  struct lock *lock1 = list_entry(l_a, struct lock, elem);
+  struct lock *lock2 = list_entry(l_b, struct lock, elem);
+  return lock1->maximum_priority > lock2->maximum_priority;
+}
+
+void
+hold_lock(struct thread *t, struct lock *t_lock)
+{
+  enum intr_level old_level = intr_disable();
+  list_insert_ordered(&t->my_locks, &t_lock->elem, sort_lock_priority_desc, NULL);
+  if(t_lock->maximum_priority > t->priority)
+  {
+    t->priority = t_lock->maximum_priority;
+    thread_yield();
+  }
+  intr_set_level(old_level);
 }
 
 
