@@ -33,7 +33,7 @@
 #include "threads/thread.h"
 
 static bool sort_semaphore_on_thread_priority(const struct list_elem *s_a, const struct list_elem *s_b, void *);
-//static bool sort_priority_desc(const struct list_elem *t_a, const struct list_elem *t_b, void *);
+
 
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
@@ -53,12 +53,6 @@ sema_init (struct semaphore *sema, unsigned value)
   list_init (&sema->waiters);
 }
 
-// static bool sort_priority_desc(const struct list_elem *t_a, const struct list_elem *t_b, void *aux UNUSED)
-// {
-//   struct thread *a = list_entry(t_a, struct thread, elem);
-//   struct thread *b = list_entry(t_b, struct thread, elem);
-//   return a->priority > b->priority;
-// }
 
 /* Down or "P" operation on a semaphore.  Waits for SEMA's value
    to become positive and then atomically decrements it.
@@ -226,7 +220,12 @@ lock_acquire (struct lock *lock)
     }
   }
   sema_down (&lock->semaphore);
-  hold_lock( cur_thread, lock);
+  if(!thread_mlfqs){
+    cur_thread->waiting_lock = NULL;
+    lock->maximum_priority = cur_thread->priority;
+    hold_lock( cur_thread, lock);
+  }
+  
   lock->holder = thread_current ();
   intr_set_level(prev_level);
 }
@@ -263,11 +262,9 @@ lock_release (struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
 
   struct thread *cur_thread = thread_current();  
-   if (!thread_mlfqs) {
-      enum intr_level prev_level = intr_disable();  
+   if (!thread_mlfqs) { 
       list_remove(&lock->elem);
       update_thread_priority_value(cur_thread);
-      intr_set_level(prev_level);
    }
    lock->holder = NULL;
    sema_up(&lock->semaphore);
@@ -353,7 +350,6 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
   ASSERT (!intr_context ());
-  
   if (!list_empty (&cond->waiters)) {
     list_sort(&cond->waiters, sort_semaphore_on_thread_priority, NULL);
     sema_up(&list_entry(list_pop_front(&cond->waiters), struct semaphore_elem, elem)->semaphore);
@@ -366,9 +362,9 @@ sort_semaphore_on_thread_priority(const struct list_elem *s_a, const struct list
 {
   const struct semaphore_elem *sema1 = list_entry(s_a, struct semaphore_elem, elem);
   const struct semaphore_elem *sema2 = list_entry(s_b, struct semaphore_elem, elem);
-  const struct thread *thread1 = list_entry(list_front(&sema1->semaphore.waiters), struct thread, elem);
-  const struct thread *thread2 = list_entry(list_front(&sema2->semaphore.waiters), struct thread, elem);
-  return thread1->priority > thread2->priority;
+  const struct thread *t1 = list_entry(list_front(&sema1->semaphore.waiters), struct thread, elem);
+  const struct thread *t2 = list_entry(list_front(&sema2->semaphore.waiters), struct thread, elem);
+  return t1->priority > t2->priority;
 }
 
 
