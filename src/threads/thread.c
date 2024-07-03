@@ -693,15 +693,6 @@ recent_cpu_increment(struct thread *t)
   }
 }
 
-void
-recalculate_threads_recent_cpu(){
-  struct list_elem *t = list_begin(&all_list);
-  while(t != list_end(&all_list))
-  {
-    recalculate_thread_recent_cpu_value(list_entry(t, struct thread, allelem), NULL);
-    t = list_next(t);
-  }
-}
 
 
 /* Offset of `stack' member within `struct thread'.

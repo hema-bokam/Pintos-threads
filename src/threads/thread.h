@@ -150,5 +150,4 @@ void recalculate_thread_priority(struct thread *t);
 void recalculate_thread_recent_cpu_value(struct thread *t, void *aux UNUSED);
 void recalculate_thread_load_avg_value(void);
 void recent_cpu_increment(struct thread *t);
-void recalculate_threads_recent_cpu(void);
 #endif /* threads/thread.h */
