@@ -211,7 +211,7 @@ timer_interrupt (struct intr_frame *args UNUSED)
     int val = ticks % TIMER_FREQ;
     if(val == 0)
     {
-      recalculate_threads_recent_cpu();
+      thread_foreach(recalculate_thread_recent_cpu_value, NULL);
       recalculate_thread_load_avg_value();
     }
     else if(val % 4 == 0)
