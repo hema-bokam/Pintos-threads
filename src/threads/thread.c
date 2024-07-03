@@ -618,11 +618,11 @@ update_thread_priority_value(struct thread *t) {
   }
   else{
     list_sort(&t->my_locks, sort_lock_priority_desc, NULL); 
-    struct lock *highest_priority_lock = list_entry(list_front(&t->my_locks), struct lock, elem);
-    if(t->original_priority > highest_priority_lock->maximum_priority)
+    struct lock *lock_hp = list_entry(list_front(&t->my_locks), struct lock, elem);
+    if(t->original_priority > lock_hp->maximum_priority)
       t -> priority = t->original_priority;
     else
-      t -> priority = highest_priority_lock->maximum_priority;
+      t -> priority = lock_hp->maximum_priority;
   } 
   list_sort(&ready_list, sort_priority_desc, NULL);
   intr_set_level(old_level);
